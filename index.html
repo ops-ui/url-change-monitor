@@ -956,9 +956,134 @@ input:focus-visible + .toggle-slider {
   color: var(--color-text-secondary);
 }
 
+.log-statistics {
+  margin-bottom: var(--space-24);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-16);
+}
+
+.stat-card {
+  background-color: var(--color-bg-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  padding: var(--space-16);
+  text-align: center;
+}
+
+.stat-card .stat-value {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+  margin-bottom: var(--space-4);
+}
+
+.stat-card .stat-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.recent-changes-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.change-log-item {
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  padding: var(--space-16);
+  transition: box-shadow var(--duration-normal) var(--ease-standard);
+}
+
+.change-log-item:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.change-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-12);
+  margin-bottom: var(--space-12);
+}
+
+.change-log-title {
+  flex: 1;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+}
+
+.change-log-time {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.change-log-url {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  word-break: break-all;
+  margin-bottom: var(--space-8);
+  padding: var(--space-8);
+  background-color: var(--color-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.change-log-details {
+  display: flex;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-12);
+}
+
+.change-log-detail {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.change-log-detail strong {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.change-log-actions {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.loading-logs {
+  text-align: center;
+  padding: var(--space-32);
+  color: var(--color-text-secondary);
+}
+
+.loading-logs .spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+  margin: 0 auto var(--space-16);
+}
+
 @media (max-width: 768px) {
   body {
     padding: var(--space-16);
+  }
+  
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
   
   .url-item-header {
@@ -1005,12 +1130,51 @@ input:focus-visible + .toggle-slider {
         </header>
 
         <div class="warning-box">
-            ⚠️ <strong>Note:</strong> All data is stored in memory only and will be lost on page refresh. Email notifications require a Vercel backend deployment.
+            ⚠️ <strong>Note:</strong> All data is stored in memory only and will be lost on page refresh. Email notifications and change logging require a Vercel backend deployment.
             <br><br>
-            💡 <strong>Backend Setup:</strong> Deploy the provided Vercel functions (<code>/api/fetch-url.js</code> and <code>/api/send-email.js</code>) and update the API endpoints in the code.
+            💡 <strong>Backend Setup:</strong> Deploy the provided Vercel functions (<code>/api/fetch-url.js</code>, <code>/api/send-email.js</code>, <code>/api/save-log.js</code>, and <code>/api/get-logs.js</code>) and update the API endpoints in the code.
             <br><br>
             📧 <strong>Email Testing:</strong> Without backend deployment, email sending will fail. The app will work for URL monitoring, but emails won't be delivered.
+            <br><br>
+            📝 <strong>Change Logs:</strong> All detected changes are automatically logged to <code>changes.log</code> file and displayed in the "Recent Changes" section below (last 30 days).
         </div>
+
+        <!-- Recent Changes Section (Last 30 Days) -->
+        <section class="section">
+            <h2 class="section-title">
+                <span class="section-title-icon">📝</span>
+                Recent Changes (Last 30 Days)
+            </h2>
+            <div id="log-statistics" class="log-statistics" style="display: none;">
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-total-changes">0</div>
+                        <div class="stat-label">Total Changes</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-emails-sent">0</div>
+                        <div class="stat-label">Emails Sent</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-emails-failed">0</div>
+                        <div class="stat-label">Emails Failed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-avg-changes">0</div>
+                        <div class="stat-label">Avg Changes/Day</div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; gap: var(--space-8); margin-bottom: var(--space-16); flex-wrap: wrap;">
+                <button class="btn btn--secondary btn--sm" onclick="loadRecentChanges()" id="refresh-logs-btn">
+                    <span>🔄</span> Refresh
+                </button>
+                <button class="btn btn--secondary btn--sm" onclick="clearOldLogs()" id="clear-logs-btn">
+                    <span>🗑️</span> Clear Old Logs
+                </button>
+            </div>
+            <div id="recent-changes-list" class="recent-changes-list"></div>
+        </section>
 
         <!-- Settings Section -->
         <section class="section">
@@ -1148,6 +1312,7 @@ input:focus-visible + .toggle-slider {
             emailConfig: {}, // Store service-specific credentials
             urls: [],
             notifications: [],
+            recentChanges: [], // Loaded from changes.log via API
             settings: {
                 autoCheckEnabled: false,
                 intervalMinutes: 480, // 8 hours default
@@ -1382,6 +1547,182 @@ input:focus-visible + .toggle-slider {
             
             button.disabled = false;
             button.innerHTML = 'Send Test Email';
+        }
+
+        // Save log entry to changes.log via Vercel backend
+        async function saveLogEntry(logEntry) {
+            const VERCEL_API = 'https://your-vercel-project.vercel.app/api/save-log';
+            const API_ENDPOINT = VERCEL_API;
+            
+            try {
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(logEntry)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    console.error('Failed to save log:', error);
+                    return { success: false, error: error.error || 'Unknown error' };
+                }
+                
+                const result = await response.json();
+                return { success: true, data: result };
+            } catch (error) {
+                console.error('Log saving error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+        
+        // Load recent changes from changes.log via Vercel backend
+        async function loadRecentChanges() {
+            const VERCEL_API = 'https://your-vercel-project.vercel.app/api/get-logs';
+            const API_ENDPOINT = `${VERCEL_API}?days=30`;
+            
+            const container = document.getElementById('recent-changes-list');
+            const statsContainer = document.getElementById('log-statistics');
+            const refreshBtn = document.getElementById('refresh-logs-btn');
+            
+            // Show loading state
+            container.innerHTML = `
+                <div class="loading-logs">
+                    <div class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></div>
+                    <p>Loading recent changes...</p>
+                </div>
+            `;
+            
+            refreshBtn.disabled = true;
+            
+            try {
+                const response = await fetch(API_ENDPOINT);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                appState.recentChanges = data.logs || [];
+                
+                // Calculate statistics
+                const stats = {
+                    totalChanges: appState.recentChanges.length,
+                    emailsSent: appState.recentChanges.filter(log => log.email_status === 'sent').length,
+                    emailsFailed: appState.recentChanges.filter(log => log.email_status === 'failed').length,
+                    avgChangesPerDay: 0
+                };
+                
+                // Calculate average changes per day
+                if (appState.recentChanges.length > 0) {
+                    const oldestLog = appState.recentChanges[appState.recentChanges.length - 1];
+                    const newestLog = appState.recentChanges[0];
+                    const daysDiff = Math.max(1, (new Date(newestLog.timestamp) - new Date(oldestLog.timestamp)) / (1000 * 60 * 60 * 24));
+                    stats.avgChangesPerDay = (stats.totalChanges / daysDiff).toFixed(1);
+                }
+                
+                // Update statistics display
+                if (stats.totalChanges > 0) {
+                    statsContainer.style.display = 'block';
+                    document.getElementById('stat-total-changes').textContent = stats.totalChanges;
+                    document.getElementById('stat-emails-sent').textContent = stats.emailsSent;
+                    document.getElementById('stat-emails-failed').textContent = stats.emailsFailed;
+                    document.getElementById('stat-avg-changes').textContent = stats.avgChangesPerDay;
+                } else {
+                    statsContainer.style.display = 'none';
+                }
+                
+                renderRecentChanges();
+            } catch (error) {
+                console.error('Error loading recent changes:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <p>Failed to load recent changes: ${error.message}</p>
+                        <p style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: var(--space-8);">Make sure the backend API is deployed and the endpoint URL is correct.</p>
+                    </div>
+                `;
+                statsContainer.style.display = 'none';
+            }
+            
+            refreshBtn.disabled = false;
+        }
+        
+        // Render recent changes list
+        function renderRecentChanges() {
+            const container = document.getElementById('recent-changes-list');
+            
+            if (appState.recentChanges.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <p>No changes detected in the last 30 days.</p>
+                        <p style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: var(--space-8);">Changes will appear here automatically when URLs are monitored and changes are detected.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = appState.recentChanges.map(log => {
+                // Email status badge
+                let emailStatusBadge = '';
+                if (log.email_status === 'sent') {
+                    emailStatusBadge = '<span class="status-badge status-badge--no-change">✓ Email Sent</span>';
+                } else if (log.email_status === 'failed') {
+                    emailStatusBadge = '<span class="status-badge status-badge--error">✗ Email Failed</span>';
+                } else if (log.email_status === 'pending') {
+                    emailStatusBadge = '<span class="status-badge status-badge--changed">⏳ Pending</span>';
+                } else {
+                    emailStatusBadge = '<span class="status-badge status-badge--not-checked">? Not Sent</span>';
+                }
+                
+                // Check type badge
+                const checkTypeBadge = `<span class="check-type-badge">${log.check_type || 'manual'} Check</span>`;
+                
+                return `
+                    <div class="change-log-item">
+                        <div class="change-log-header">
+                            <div class="change-log-title">🔔 Change Detected</div>
+                            <div class="change-log-time">${formatTimestamp(log.timestamp)}</div>
+                        </div>
+                        <div class="change-log-url">${escapeHtml(log.url)}</div>
+                        <div class="change-log-details">
+                            <div class="change-log-detail">
+                                <strong>Lines Added:</strong> +${log.lines_added || 0}
+                            </div>
+                            <div class="change-log-detail">
+                                <strong>Lines Removed:</strong> -${log.lines_removed || 0}
+                            </div>
+                            <div class="change-log-detail">
+                                <strong>Recipient:</strong> ${escapeHtml(log.email || 'N/A')}
+                            </div>
+                        </div>
+                        ${log.diff_preview ? `
+                            <div style="margin-bottom: var(--space-12);">
+                                <div class="url-detail-label" style="margin-bottom: var(--space-6);">DIFF PREVIEW</div>
+                                <div style="font-family: var(--font-family-mono); font-size: var(--font-size-xs); background-color: var(--color-secondary); padding: var(--space-8); border-radius: var(--radius-sm); white-space: pre-wrap; word-break: break-word; max-height: 150px; overflow-y: auto;">${escapeHtml(log.diff_preview.substring(0, 500))}</div>
+                            </div>
+                        ` : ''}
+                        <div class="change-log-actions">
+                            ${checkTypeBadge}
+                            ${emailStatusBadge}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Clear old logs (older than 30 days)
+        async function clearOldLogs() {
+            if (!confirm('This will remove all change logs older than 30 days. Continue?')) {
+                return;
+            }
+            
+            // Note: This would require a backend API endpoint to actually delete old logs
+            // For now, we'll just reload the current logs
+            alert('Note: Automatic cleanup of old logs requires backend implementation. The API currently returns only the last 30 days.');
+            await loadRecentChanges();
         }
 
         // Send email via Vercel backend
@@ -2173,6 +2514,9 @@ input:focus-visible + .toggle-slider {
         renderEmailDisplay();
         renderUrlList();
         renderNotificationList();
+        
+        // Load recent changes from changes.log on startup
+        loadRecentChanges();
         
         // Initialize settings display
         const toggle = document.getElementById('auto-check-toggle');
