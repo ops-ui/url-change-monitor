@@ -1005,9 +1005,11 @@ input:focus-visible + .toggle-slider {
         </header>
 
         <div class="warning-box">
-            ⚠️ <strong>Note:</strong> All data is stored in memory only and will be lost on page refresh. Actual email sending requires server-side functionality - this app simulates notifications.
+            ⚠️ <strong>Note:</strong> All data is stored in memory only and will be lost on page refresh. Email notifications require a Vercel backend deployment.
             <br><br>
-            💡 <strong>GitHub Hosting:</strong> This app is ready to host on GitHub Pages! See the code comments for optional localStorage implementation to persist data between sessions.
+            💡 <strong>Backend Setup:</strong> Deploy the provided Vercel functions (<code>/api/fetch-url.js</code> and <code>/api/send-email.js</code>) and update the API endpoints in the code.
+            <br><br>
+            📧 <strong>Email Testing:</strong> Without backend deployment, email sending will fail. The app will work for URL monitoring, but emails won't be delivered.
         </div>
 
         <!-- Settings Section -->
@@ -1060,19 +1062,28 @@ input:focus-visible + .toggle-slider {
                 <span class="section-title-icon">✉️</span>
                 Email Configuration
             </h2>
+            <div class="warning-box">
+                ⚠️ <strong>Security Warning:</strong> API keys and credentials are stored in memory only and will be lost on page refresh. Never share your API keys publicly.
+            </div>
             <div class="form-group">
-                <label class="form-label" for="email-input">Your Email Address</label>
-                <div class="input-group">
-                    <input 
-                        type="email" 
-                        id="email-input" 
-                        class="form-control" 
-                        placeholder="your.email@example.com"
-                    >
-                    <button class="btn btn--primary" onclick="saveEmail()">
-                        Save Email
-                    </button>
-                </div>
+                <label class="form-label" for="email-service-select">Email Service</label>
+                <select id="email-service-select" class="form-control" onchange="updateEmailServiceFields()">
+                    <option value="">Select email service...</option>
+                    <option value="sendgrid">SendGrid</option>
+                    <option value="mailgun">Mailgun</option>
+                    <option value="gmail">Gmail</option>
+                    <option value="smtp">Custom SMTP</option>
+                </select>
+            </div>
+            <div id="email-service-instructions" style="display: none; margin-bottom: var(--space-16); padding: var(--space-12); background-color: var(--color-bg-1); border: 1px solid var(--color-info); border-radius: var(--radius-base); font-size: var(--font-size-sm);"></div>
+            <div id="email-service-fields"></div>
+            <div style="display: flex; gap: var(--space-8); margin-top: var(--space-16);">
+                <button class="btn btn--primary" onclick="saveEmailConfig()" id="save-email-btn" disabled>
+                    Save Configuration
+                </button>
+                <button class="btn btn--secondary" onclick="testEmail()" id="test-email-btn" disabled>
+                    Send Test Email
+                </button>
             </div>
             <div id="current-email-display"></div>
         </section>
@@ -1133,12 +1144,52 @@ input:focus-visible + .toggle-slider {
         // FOR GITHUB USERS: Uncomment localStorage code below to persist data between sessions
         let appState = {
             email: '',
+            emailService: '',
+            emailConfig: {}, // Store service-specific credentials
             urls: [],
             notifications: [],
             settings: {
                 autoCheckEnabled: false,
                 intervalMinutes: 480, // 8 hours default
                 lastAutoCheck: null
+            }
+        };
+        
+        // Email service configurations
+        const emailServices = {
+            gmail: {
+                name: 'Gmail',
+                fields: [
+                    { name: 'email', label: 'Gmail Address', type: 'email', placeholder: 'your@gmail.com' },
+                    { name: 'password', label: 'App Password', type: 'password', placeholder: '16-character app password' }
+                ],
+                instructions: '📖 <strong>Setup Instructions:</strong> Go to your Google Account → Security → 2-Step Verification → App passwords → Generate app password for "Mail"'
+            },
+            sendgrid: {
+                name: 'SendGrid',
+                fields: [
+                    { name: 'api_key', label: 'SendGrid API Key', type: 'password', placeholder: 'SG.xxxxxxxxx' },
+                    { name: 'from_email', label: 'From Email', type: 'email', placeholder: 'notifications@yourdomain.com' }
+                ],
+                instructions: '📖 <strong>Setup Instructions:</strong> Create free SendGrid account → Settings → API Keys → Create API Key with "Mail Send" permission'
+            },
+            mailgun: {
+                name: 'Mailgun',
+                fields: [
+                    { name: 'domain', label: 'Mailgun Domain', type: 'text', placeholder: 'mg.example.com' },
+                    { name: 'api_key', label: 'API Key', type: 'password', placeholder: 'key-xxxxx' }
+                ],
+                instructions: '📖 <strong>Setup Instructions:</strong> Create Mailgun account → Add and verify domain → Settings → API Keys → Copy Private API key'
+            },
+            smtp: {
+                name: 'Custom SMTP',
+                fields: [
+                    { name: 'host', label: 'SMTP Server', type: 'text', placeholder: 'smtp.gmail.com' },
+                    { name: 'port', label: 'Port', type: 'number', placeholder: '587' },
+                    { name: 'email', label: 'Email Address', type: 'email', placeholder: 'your@email.com' },
+                    { name: 'password', label: 'Password', type: 'password', placeholder: 'password' }
+                ],
+                instructions: '📖 <strong>Setup Instructions:</strong> Use your email provider\'s SMTP settings (usually found in email client configuration docs)'
             }
         };
         
@@ -1155,7 +1206,7 @@ input:focus-visible + .toggle-slider {
         // To enable persistence when hosting on GitHub Pages:
         // 
         // Step 1: Uncomment the functions below:
-        
+        /*
         function saveToStorage() {
             try {
                 // Use browser storage API to persist data between sessions
@@ -1178,7 +1229,7 @@ input:focus-visible + .toggle-slider {
                 console.warn('Storage not available:', e);
             }
         }
-        
+        */
         // Step 2: Call loadFromStorage() in the Initialize section below
         // Step 3: Call saveToStorage() after any state change (e.g., after adding URLs, saving email, etc.)
 
@@ -1203,33 +1254,184 @@ input:focus-visible + .toggle-slider {
             });
         }
 
-        // Save email
-        function saveEmail() {
-            const emailInput = document.getElementById('email-input');
-            const email = emailInput.value.trim();
+        // Update email service fields based on selection
+        function updateEmailServiceFields() {
+            const select = document.getElementById('email-service-select');
+            const service = select.value;
+            const fieldsContainer = document.getElementById('email-service-fields');
+            const instructionsContainer = document.getElementById('email-service-instructions');
+            const saveBtn = document.getElementById('save-email-btn');
+            const testBtn = document.getElementById('test-email-btn');
             
-            if (!email) {
-                alert('Please enter an email address');
+            if (!service) {
+                fieldsContainer.innerHTML = '';
+                instructionsContainer.style.display = 'none';
+                saveBtn.disabled = true;
+                testBtn.disabled = true;
                 return;
             }
             
-            if (!email.includes('@') || !email.includes('.')) {
-                alert('Please enter a valid email address');
+            const serviceConfig = emailServices[service];
+            instructionsContainer.innerHTML = serviceConfig.instructions;
+            instructionsContainer.style.display = 'block';
+            
+            // Render fields for selected service
+            fieldsContainer.innerHTML = serviceConfig.fields.map(field => `
+                <div class="form-group">
+                    <label class="form-label" for="email-field-${field.name}">${field.label}</label>
+                    <input 
+                        type="${field.type}" 
+                        id="email-field-${field.name}" 
+                        class="form-control" 
+                        placeholder="${field.placeholder}"
+                    >
+                </div>
+            `).join('');
+            
+            // Add recipient email field
+            fieldsContainer.innerHTML += `
+                <div class="form-group">
+                    <label class="form-label" for="email-field-recipient">Notification Recipient Email</label>
+                    <input 
+                        type="email" 
+                        id="email-field-recipient" 
+                        class="form-control" 
+                        placeholder="Where to send notifications"
+                        value="${appState.email}"
+                    >
+                </div>
+            `;
+            
+            saveBtn.disabled = false;
+            testBtn.disabled = true; // Enable after saving
+        }
+        
+        // Save email configuration
+        function saveEmailConfig() {
+            const service = document.getElementById('email-service-select').value;
+            if (!service) {
+                alert('Please select an email service');
                 return;
             }
             
-            appState.email = email;
-            emailInput.value = '';
+            const serviceConfig = emailServices[service];
+            const config = {};
+            let allFieldsFilled = true;
+            
+            // Collect all field values
+            serviceConfig.fields.forEach(field => {
+                const input = document.getElementById(`email-field-${field.name}`);
+                const value = input.value.trim();
+                if (!value) {
+                    allFieldsFilled = false;
+                }
+                config[field.name] = value;
+            });
+            
+            // Get recipient email
+            const recipientInput = document.getElementById('email-field-recipient');
+            const recipient = recipientInput.value.trim();
+            if (!recipient || !recipient.includes('@')) {
+                alert('Please enter a valid recipient email address');
+                return;
+            }
+            
+            if (!allFieldsFilled) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            appState.email = recipient;
+            appState.emailService = service;
+            appState.emailConfig = config;
+            
+            document.getElementById('test-email-btn').disabled = false;
             renderEmailDisplay();
+            alert('✓ Email configuration saved! You can now test it.');
+        }
+        
+        // Test email
+        async function testEmail() {
+            if (!appState.emailService || !appState.email) {
+                alert('Please configure email settings first');
+                return;
+            }
+            
+            const button = document.getElementById('test-email-btn');
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner"></span> Sending...';
+            
+            try {
+                const result = await sendEmail(
+                    appState.email,
+                    'Test notification from URL Monitor',
+                    'https://example.com/test.txt',
+                    5,
+                    2,
+                    'This is a test email to verify your configuration is working correctly.'
+                );
+                
+                if (result.success) {
+                    alert('✓ Test email sent successfully! Check your inbox.');
+                } else {
+                    alert('✗ Failed to send test email: ' + result.error);
+                }
+            } catch (error) {
+                alert('✗ Error sending test email: ' + error.message);
+            }
+            
+            button.disabled = false;
+            button.innerHTML = 'Send Test Email';
         }
 
+        // Send email via Vercel backend
+        async function sendEmail(recipientEmail, url, linesAdded, linesRemoved, diffPreview) {
+            const VERCEL_API = 'https://your-vercel-project.vercel.app/api/send-email';
+            // Fallback for local testing
+            const API_ENDPOINT = VERCEL_API;
+            
+            try {
+                const payload = {
+                    email: recipientEmail,
+                    url: url,
+                    lines_added: linesAdded,
+                    lines_removed: linesRemoved,
+                    diff_preview: diffPreview,
+                    timestamp: new Date().toISOString(),
+                    service: appState.emailService,
+                    ...appState.emailConfig
+                };
+                
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    return { success: false, error: error.error || 'Unknown error' };
+                }
+                
+                const result = await response.json();
+                return { success: true, data: result };
+            } catch (error) {
+                console.error('Email sending error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+        
         // Render email display
         function renderEmailDisplay() {
             const display = document.getElementById('current-email-display');
-            if (appState.email) {
+            if (appState.email && appState.emailService) {
+                const serviceName = emailServices[appState.emailService].name;
                 display.innerHTML = `
                     <div class="current-email">
-                        ✓ <strong>Configured Email:</strong> ${appState.email}
+                        ✓ <strong>Email Configured:</strong> ${appState.email}<br>
+                        <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Service: ${serviceName}</span>
                     </div>
                 `;
             } else {
@@ -1280,6 +1482,56 @@ input:focus-visible + .toggle-slider {
             }
         }
 
+        // Fetch URL via Vercel backend
+        async function fetchUrlContent(url) {
+            const VERCEL_API = 'https://your-vercel-project.vercel.app/api/fetch-url';
+            // Fallback to direct fetch (may have CORS issues)
+            
+            try {
+                // Try Vercel backend first
+                const response = await fetch(VERCEL_API, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    return { content: data.content, method: 'Vercel Backend' };
+                }
+            } catch (error) {
+                console.warn('Vercel backend failed, trying direct fetch:', error);
+            }
+            
+            // Fallback to direct fetch
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    cache: 'no-cache'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const content = await response.text();
+                return { content: content, method: 'Direct Fetch' };
+            } catch (error) {
+                // Try CORS proxy as last resort
+                const corsProxy = 'https://corsproxy.io/?';
+                const proxyResponse = await fetch(corsProxy + encodeURIComponent(url));
+                
+                if (!proxyResponse.ok) {
+                    throw new Error(`HTTP ${proxyResponse.status}: ${proxyResponse.statusText}`);
+                }
+                
+                const content = await proxyResponse.text();
+                return { content: content, method: 'CORS Proxy' };
+            }
+        }
+        
         // Check single URL
         async function checkUrl(id, isAutomatic = false) {
             const urlItem = appState.urls.find(item => item.id === id);
@@ -1292,16 +1544,7 @@ input:focus-visible + .toggle-slider {
             }
             
             try {
-                const response = await fetch(urlItem.url, {
-                    method: 'GET',
-                    cache: 'no-cache'
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const content = await response.text();
+                const { content, method } = await fetchUrlContent(urlItem.url);
                 const newHash = simpleHash(content);
                 
                 const previousHash = urlItem.lastHash;
@@ -1328,7 +1571,38 @@ input:focus-visible + .toggle-slider {
                         newSize: content.length
                     };
                     
-                    addNotification(urlItem.url, isAutomatic ? 'Automatic' : 'Manual', urlItem.id, stats);
+                    // Send email notification if configured
+                    let emailStatus = 'not_sent';
+                    if (appState.email && appState.emailService) {
+                        emailStatus = 'pending';
+                        const diffPreview = diff.slice(0, 10).map(line => {
+                            const prefix = line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ';
+                            return prefix + ' ' + line.content;
+                        }).join('\n');
+                        
+                        sendEmail(
+                            appState.email,
+                            urlItem.url,
+                            stats.linesAdded,
+                            stats.linesRemoved,
+                            diffPreview
+                        ).then(result => {
+                            const notification = appState.notifications.find(n => n.id === notificationId);
+                            if (notification) {
+                                notification.emailStatus = result.success ? 'sent' : 'failed';
+                                notification.emailError = result.success ? null : result.error;
+                                renderNotificationList();
+                            }
+                        });
+                    }
+                    
+                    const notificationId = addNotification(
+                        urlItem.url, 
+                        isAutomatic ? 'Automatic' : 'Manual', 
+                        urlItem.id, 
+                        stats, 
+                        emailStatus
+                    );
                 } else {
                     // No change - update stored content
                     urlItem.status = 'no_change';
@@ -1690,7 +1964,7 @@ input:focus-visible + .toggle-slider {
         }
         
         // Add notification
-        function addNotification(url, checkType = 'Manual', urlId = null, stats = null) {
+        function addNotification(url, checkType = 'Manual', urlId = null, stats = null, emailStatus = 'not_sent') {
             const notification = {
                 id: Date.now(),
                 url: url,
@@ -1698,10 +1972,52 @@ input:focus-visible + .toggle-slider {
                 timestamp: Date.now(),
                 email: appState.email || 'Not configured',
                 checkType: checkType,
-                stats: stats
+                stats: stats,
+                emailStatus: emailStatus, // 'not_sent', 'pending', 'sent', 'failed'
+                emailError: null
             };
             
             appState.notifications.unshift(notification);
+            renderNotificationList();
+            return notification.id;
+        }
+        
+        // Resend email for a notification
+        async function resendEmail(notificationId) {
+            const notification = appState.notifications.find(n => n.id === notificationId);
+            if (!notification) return;
+            
+            if (!appState.email || !appState.emailService) {
+                alert('Please configure email settings first');
+                return;
+            }
+            
+            notification.emailStatus = 'pending';
+            notification.emailError = null;
+            renderNotificationList();
+            
+            // Get diff preview
+            const urlItem = appState.urls.find(u => u.id === notification.urlId);
+            let diffPreview = 'Change detected';
+            if (urlItem && contentStore[notification.urlId]) {
+                const { old: oldContent, new: newContent } = contentStore[notification.urlId];
+                const diff = calculateDiff(oldContent, newContent);
+                diffPreview = diff.slice(0, 10).map(line => {
+                    const prefix = line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ';
+                    return prefix + ' ' + line.content;
+                }).join('\n');
+            }
+            
+            const result = await sendEmail(
+                notification.email,
+                notification.url,
+                notification.stats.linesAdded,
+                notification.stats.linesRemoved,
+                diffPreview
+            );
+            
+            notification.emailStatus = result.success ? 'sent' : 'failed';
+            notification.emailError = result.success ? null : result.error;
             renderNotificationList();
         }
 
@@ -1803,6 +2119,18 @@ input:focus-visible + .toggle-slider {
                     `+${notification.stats.linesAdded} lines added, -${notification.stats.linesRemoved} lines removed` : 
                     'Changes detected';
                 
+                // Email status badge
+                let emailStatusBadge = '';
+                if (notification.emailStatus === 'sent') {
+                    emailStatusBadge = '<span class="status-badge status-badge--no-change">✓ Email Sent</span>';
+                } else if (notification.emailStatus === 'pending') {
+                    emailStatusBadge = '<span class="status-badge status-badge--changed">⏳ Sending...</span>';
+                } else if (notification.emailStatus === 'failed') {
+                    emailStatusBadge = '<span class="status-badge status-badge--error">✗ Email Failed</span>';
+                } else {
+                    emailStatusBadge = '<span class="status-badge status-badge--not-checked">? Not Sent</span>';
+                }
+                
                 return `
                     <div class="notification-item">
                         <div class="notification-header">
@@ -1813,12 +2141,23 @@ input:focus-visible + .toggle-slider {
                         ${notification.stats ? `
                             <div class="notification-email"><strong>Changes:</strong> ${statsText}</div>
                         ` : ''}
-                        <div class="notification-email">📧 Email would be sent to: <strong>${notification.email}</strong></div>
-                        <div style="display: flex; gap: var(--space-8); align-items: center; margin-top: var(--space-8);">
+                        <div class="notification-email">📧 Recipient: <strong>${notification.email}</strong></div>
+                        ${notification.emailError ? `
+                            <div class="notification-email" style="color: var(--color-error); font-size: var(--font-size-xs);">
+                                <strong>Error:</strong> ${notification.emailError}
+                            </div>
+                        ` : ''}
+                        <div style="display: flex; gap: var(--space-8); align-items: center; margin-top: var(--space-8); flex-wrap: wrap;">
                             <span class="check-type-badge">${notification.checkType} Check</span>
+                            ${emailStatusBadge}
                             ${notification.urlId && contentStore[notification.urlId] ? `
                                 <button class="btn btn--sm btn--primary" onclick="showDiff(${notification.urlId})">
                                     View Diff
+                                </button>
+                            ` : ''}
+                            ${notification.emailStatus === 'failed' || notification.emailStatus === 'not_sent' ? `
+                                <button class="btn btn--sm btn--secondary" onclick="resendEmail(${notification.id})">
+                                    Resend Email
                                 </button>
                             ` : ''}
                         </div>
