@@ -777,6 +777,185 @@ input:focus-visible + .toggle-slider {
   }
 }
 
+/* Diff Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-24);
+}
+
+.modal-content {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  max-width: 1200px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--color-border);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--space-24);
+  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-16);
+}
+
+.modal-title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.modal-url {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  word-break: break-all;
+  margin-top: var(--space-4);
+}
+
+.modal-close {
+  background: var(--color-secondary);
+  border: none;
+  border-radius: var(--radius-base);
+  padding: var(--space-8) var(--space-12);
+  cursor: pointer;
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+  transition: background-color var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.modal-close:hover {
+  background: var(--color-secondary-hover);
+}
+
+.modal-stats {
+  padding: var(--space-16) var(--space-24);
+  background-color: var(--color-bg-1);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  gap: var(--space-24);
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-value {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.stat-value--added {
+  color: #2e7d32;
+}
+
+.stat-value--removed {
+  color: #c62828;
+}
+
+@media (prefers-color-scheme: dark) {
+  .stat-value--added {
+    color: #66bb6a;
+  }
+  
+  .stat-value--removed {
+    color: #ef5350;
+  }
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-24);
+}
+
+.diff-container {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  overflow: hidden;
+}
+
+.diff-line {
+  display: flex;
+  padding: var(--space-4) var(--space-12);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-line-prefix {
+  width: 30px;
+  flex-shrink: 0;
+  font-weight: var(--font-weight-bold);
+  user-select: none;
+}
+
+.diff-line-content {
+  flex: 1;
+}
+
+.diff-line--added {
+  background-color: #c8e6c9;
+  color: #1b5e20;
+}
+
+.diff-line--removed {
+  background-color: #ffcdd2;
+  color: #b71c1c;
+}
+
+.diff-line--unchanged {
+  background-color: var(--color-background);
+  color: var(--color-text-secondary);
+}
+
+@media (prefers-color-scheme: dark) {
+  .diff-line--added {
+    background-color: rgba(46, 125, 50, 0.2);
+    color: #81c784;
+  }
+  
+  .diff-line--removed {
+    background-color: rgba(198, 40, 40, 0.2);
+    color: #e57373;
+  }
+}
+
+.empty-diff {
+  text-align: center;
+  padding: var(--space-32);
+  color: var(--color-text-secondary);
+}
+
 @media (max-width: 768px) {
   body {
     padding: var(--space-16);
@@ -793,6 +972,27 @@ input:focus-visible + .toggle-slider {
   
   .url-item-details {
     grid-template-columns: 1fr;
+  }
+  
+  .modal-overlay {
+    padding: var(--space-16);
+  }
+  
+  .modal-header {
+    padding: var(--space-16);
+  }
+  
+  .modal-stats {
+    padding: var(--space-12) var(--space-16);
+    gap: var(--space-16);
+  }
+  
+  .modal-body {
+    padding: var(--space-16);
+  }
+  
+  .diff-line {
+    font-size: var(--font-size-xs);
   }
 }
     </style>
@@ -942,6 +1142,9 @@ input:focus-visible + .toggle-slider {
             }
         };
         
+        // Store content for diff comparison
+        let contentStore = {}; // { urlId: { old: string, new: string } }
+        
         // Auto-check timer management
         let autoCheckInterval = null;
         let countdownInterval = null;
@@ -952,7 +1155,7 @@ input:focus-visible + .toggle-slider {
         // To enable persistence when hosting on GitHub Pages:
         // 
         // Step 1: Uncomment the functions below:
-        /*
+        
         function saveToStorage() {
             try {
                 // Use browser storage API to persist data between sessions
@@ -975,7 +1178,7 @@ input:focus-visible + .toggle-slider {
                 console.warn('Storage not available:', e);
             }
         }
-        */
+        
         // Step 2: Call loadFromStorage() in the Initialize section below
         // Step 3: Call saveToStorage() after any state change (e.g., after adding URLs, saving email, etc.)
 
@@ -1107,15 +1310,34 @@ input:focus-visible + .toggle-slider {
                 urlItem.errorMessage = null;
                 
                 if (previousHash === null) {
-                    // First check
+                    // First check - store content for future comparison
                     urlItem.status = 'no_change';
+                    contentStore[urlItem.id] = { old: content, new: content };
                 } else if (previousHash !== newHash) {
-                    // Change detected
+                    // Change detected - store both old and new content
+                    const oldContent = contentStore[urlItem.id] ? contentStore[urlItem.id].new : '';
+                    contentStore[urlItem.id] = { old: oldContent, new: content };
                     urlItem.status = 'changed';
-                    addNotification(urlItem.url, isAutomatic ? 'Automatic' : 'Manual');
+                    
+                    // Calculate diff statistics
+                    const diff = calculateDiff(oldContent, content);
+                    const stats = {
+                        linesAdded: diff.filter(line => line.type === 'added').length,
+                        linesRemoved: diff.filter(line => line.type === 'removed').length,
+                        oldSize: oldContent.length,
+                        newSize: content.length
+                    };
+                    
+                    addNotification(urlItem.url, isAutomatic ? 'Automatic' : 'Manual', urlItem.id, stats);
                 } else {
-                    // No change
+                    // No change - update stored content
                     urlItem.status = 'no_change';
+                    if (contentStore[urlItem.id]) {
+                        contentStore[urlItem.id].old = contentStore[urlItem.id].new;
+                        contentStore[urlItem.id].new = content;
+                    } else {
+                        contentStore[urlItem.id] = { old: content, new: content };
+                    }
                 }
             } catch (error) {
                 urlItem.status = 'error';
@@ -1278,14 +1500,205 @@ input:focus-visible + .toggle-slider {
             button.innerHTML = 'Check All Now';
         }
 
+        // Calculate diff between two texts
+        function calculateDiff(oldText, newText) {
+            const oldLines = oldText.split('\n');
+            const newLines = newText.split('\n');
+            const diff = [];
+            
+            // Simple line-by-line diff using longest common subsequence approach
+            const lcs = longestCommonSubsequence(oldLines, newLines);
+            
+            let oldIndex = 0;
+            let newIndex = 0;
+            let lcsIndex = 0;
+            
+            while (oldIndex < oldLines.length || newIndex < newLines.length) {
+                // Check if current line is in LCS
+                if (lcsIndex < lcs.length && 
+                    oldIndex < oldLines.length && 
+                    newIndex < newLines.length &&
+                    oldLines[oldIndex] === lcs[lcsIndex] && 
+                    newLines[newIndex] === lcs[lcsIndex]) {
+                    // Unchanged line
+                    diff.push({ type: 'unchanged', content: oldLines[oldIndex] });
+                    oldIndex++;
+                    newIndex++;
+                    lcsIndex++;
+                } else if (lcsIndex < lcs.length && 
+                           newIndex < newLines.length && 
+                           newLines[newIndex] === lcs[lcsIndex]) {
+                    // Line was added
+                    diff.push({ type: 'added', content: newLines[newIndex] });
+                    newIndex++;
+                } else if (lcsIndex < lcs.length && 
+                           oldIndex < oldLines.length && 
+                           oldLines[oldIndex] === lcs[lcsIndex]) {
+                    // Line was removed
+                    diff.push({ type: 'removed', content: oldLines[oldIndex] });
+                    oldIndex++;
+                } else if (oldIndex < oldLines.length && newIndex < newLines.length) {
+                    // Changed line (shown as removed + added)
+                    diff.push({ type: 'removed', content: oldLines[oldIndex] });
+                    diff.push({ type: 'added', content: newLines[newIndex] });
+                    oldIndex++;
+                    newIndex++;
+                } else if (oldIndex < oldLines.length) {
+                    // Removed line at end
+                    diff.push({ type: 'removed', content: oldLines[oldIndex] });
+                    oldIndex++;
+                } else if (newIndex < newLines.length) {
+                    // Added line at end
+                    diff.push({ type: 'added', content: newLines[newIndex] });
+                    newIndex++;
+                }
+            }
+            
+            return diff;
+        }
+        
+        // Longest Common Subsequence algorithm for diff
+        function longestCommonSubsequence(arr1, arr2) {
+            const m = arr1.length;
+            const n = arr2.length;
+            const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+            
+            for (let i = 1; i <= m; i++) {
+                for (let j = 1; j <= n; j++) {
+                    if (arr1[i - 1] === arr2[j - 1]) {
+                        dp[i][j] = dp[i - 1][j - 1] + 1;
+                    } else {
+                        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                    }
+                }
+            }
+            
+            // Reconstruct LCS
+            const lcs = [];
+            let i = m, j = n;
+            while (i > 0 && j > 0) {
+                if (arr1[i - 1] === arr2[j - 1]) {
+                    lcs.unshift(arr1[i - 1]);
+                    i--;
+                    j--;
+                } else if (dp[i - 1][j] > dp[i][j - 1]) {
+                    i--;
+                } else {
+                    j--;
+                }
+            }
+            
+            return lcs;
+        }
+        
+        // Show diff modal
+        function showDiff(urlId) {
+            const urlItem = appState.urls.find(item => item.id === urlId);
+            if (!urlItem || !contentStore[urlId]) {
+                alert('No diff data available for this URL.');
+                return;
+            }
+            
+            const { old: oldContent, new: newContent } = contentStore[urlId];
+            const diff = calculateDiff(oldContent, newContent);
+            
+            // Calculate statistics
+            const linesAdded = diff.filter(line => line.type === 'added').length;
+            const linesRemoved = diff.filter(line => line.type === 'removed').length;
+            const totalChanged = linesAdded + linesRemoved;
+            const oldSize = oldContent.length;
+            const newSize = newContent.length;
+            const sizeChange = newSize - oldSize;
+            
+            // Create modal
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            };
+            
+            const diffLines = diff.map(line => {
+                const prefix = line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ';
+                const className = `diff-line diff-line--${line.type}`;
+                const content = line.content || ' ';
+                return `
+                    <div class="${className}">
+                        <div class="diff-line-prefix">${prefix}</div>
+                        <div class="diff-line-content">${escapeHtml(content)}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <div>
+                            <h2 class="modal-title">📊 File Diff</h2>
+                            <div class="modal-url">${escapeHtml(urlItem.url)}</div>
+                        </div>
+                        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+                    </div>
+                    <div class="modal-stats">
+                        <div class="stat-item">
+                            <div class="stat-label">Lines Added</div>
+                            <div class="stat-value stat-value--added">+${linesAdded}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Lines Removed</div>
+                            <div class="stat-value stat-value--removed">-${linesRemoved}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Total Changed</div>
+                            <div class="stat-value">${totalChanged}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">File Size</div>
+                            <div class="stat-value">${formatBytes(oldSize)} → ${formatBytes(newSize)}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Size Change</div>
+                            <div class="stat-value">${sizeChange >= 0 ? '+' : ''}${formatBytes(sizeChange)}</div>
+                        </div>
+                    </div>
+                    <div class="modal-body">
+                        <div class="diff-container">
+                            ${diffLines || '<div class="empty-diff">No differences found</div>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+        
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Helper function to format bytes
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
         // Add notification
-        function addNotification(url, checkType = 'Manual') {
+        function addNotification(url, checkType = 'Manual', urlId = null, stats = null) {
             const notification = {
                 id: Date.now(),
                 url: url,
+                urlId: urlId,
                 timestamp: Date.now(),
                 email: appState.email || 'Not configured',
-                checkType: checkType
+                checkType: checkType,
+                stats: stats
             };
             
             appState.notifications.unshift(notification);
@@ -1319,6 +1732,14 @@ input:focus-visible + .toggle-slider {
                         <div class="url-item-header">
                             <div class="url-item-url">${urlItem.url}</div>
                             <div class="url-item-actions">
+                                ${urlItem.status === 'changed' ? `
+                                    <button 
+                                        class="btn btn--sm btn--primary" 
+                                        onclick="showDiff(${urlItem.id})"
+                                    >
+                                        View Diff
+                                    </button>
+                                ` : ''}
                                 <button 
                                     class="btn btn--sm btn--secondary" 
                                     onclick="checkUrl(${urlItem.id})"
@@ -1377,17 +1798,33 @@ input:focus-visible + .toggle-slider {
                 return;
             }
             
-            container.innerHTML = appState.notifications.map(notification => `
-                <div class="notification-item">
-                    <div class="notification-header">
-                        <div class="notification-title">🔔 Change Detected</div>
-                        <div class="notification-time">${formatTimestamp(notification.timestamp)}</div>
+            container.innerHTML = appState.notifications.map(notification => {
+                const statsText = notification.stats ? 
+                    `+${notification.stats.linesAdded} lines added, -${notification.stats.linesRemoved} lines removed` : 
+                    'Changes detected';
+                
+                return `
+                    <div class="notification-item">
+                        <div class="notification-header">
+                            <div class="notification-title">🔔 Change Detected</div>
+                            <div class="notification-time">${formatTimestamp(notification.timestamp)}</div>
+                        </div>
+                        <div class="notification-url"><strong>URL:</strong> ${notification.url}</div>
+                        ${notification.stats ? `
+                            <div class="notification-email"><strong>Changes:</strong> ${statsText}</div>
+                        ` : ''}
+                        <div class="notification-email">📧 Email would be sent to: <strong>${notification.email}</strong></div>
+                        <div style="display: flex; gap: var(--space-8); align-items: center; margin-top: var(--space-8);">
+                            <span class="check-type-badge">${notification.checkType} Check</span>
+                            ${notification.urlId && contentStore[notification.urlId] ? `
+                                <button class="btn btn--sm btn--primary" onclick="showDiff(${notification.urlId})">
+                                    View Diff
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
-                    <div class="notification-url"><strong>URL:</strong> ${notification.url}</div>
-                    <div class="notification-email">📧 Email would be sent to: <strong>${notification.email}</strong></div>
-                    <div class="notification-email"><span class="check-type-badge">${notification.checkType} Check</span></div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         // Initialize
